@@ -13,6 +13,7 @@ public:
   lns_command( environment::ptr& env ) : cirkit::cirkit_command<lns_command, aig_t, mig_t, xag_t, xmg_t, klut_t>( env, "Logic network based hierarchical synthesis", "hierarchical synthesis from {0}" )
   {
     add_flag( "--outofplace", "use always out-of-place mapping" );
+    add_flag( "--pebbling", "use always out-of-place pebbling" );
     add_flag( "-v,--verbose", "be verbose" );
   }
 
@@ -28,6 +29,10 @@ public:
     circs.current() = qcircuit_t();
 
     using LogicNetwork = typename Store::element_type;
+    if ( is_set( "pebbling" ) )
+    {
+      tweedledum::logic_network_synthesis<qcircuit_t, LogicNetwork, typename tweedledum::pebbling_mapping_strategy<LogicNetwork>>( circs.current(), *( store<Store>().current() ), ps );
+    }
     if ( is_set( "outofplace" ) )
     {
       tweedledum::logic_network_synthesis<qcircuit_t, LogicNetwork, typename tweedledum::bennett_mapping_strategy<LogicNetwork>>( circs.current(), *( store<Store>().current() ), ps );

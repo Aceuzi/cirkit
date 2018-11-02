@@ -41,6 +41,26 @@ using mapping_strategy_action
     = std::variant<compute_action, uncompute_action, compute_inplace_action, uncompute_inplace_action>;
 
 template<class LogicNetwork>
+class pebbling_mapping_strategy {
+	/* returns the method foreach_step */
+	pebbling_mapping_strategy(LogicNetwork const& ntk)
+	{
+
+	}
+	
+	template<class Fn>
+	inline void foreach_step(Fn&& fn) const
+	{
+		for (auto const& [n, a] : steps)
+			fn(n, a);
+	}
+
+private:
+	std::vector<std::pair<mt::node<LogicNetwork>, mapping_strategy_action>> steps;
+
+};
+
+template<class LogicNetwork>
 class bennett_mapping_strategy {
 public:
 	bennett_mapping_strategy(LogicNetwork const& ntk)
