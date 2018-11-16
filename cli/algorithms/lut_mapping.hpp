@@ -15,6 +15,7 @@ public:
     add_option( "-k,--lutsize", ps.cut_enumeration_ps.cut_size, "cut size", true );
     add_option( "--lutcount", ps.cut_enumeration_ps.cut_limit, "number of cuts per node", true );
     add_flag( "--nofun", "do not compute cut functions" );
+    add_flag( "--spectralcuts", "cost the cuts with the number of non-zero spectral coefficients" );
   }
 
   template<class Store>
@@ -26,7 +27,21 @@ public:
     }
     else
     {
-      mockturtle::lut_mapping<typename Store::element_type, true>( *( store<Store>().current() ), ps );
+      if(is_set("spectralcuts"))
+      {
+        if constexpr(mockturtle::has_is_xor_v<typename Store::element_type>)
+        {
+          mockturtle::lut_mapping<typename Store::element_type, true, mockturtle::cut_enumeration_spectr_cut>( *( store<Store>().current() ), ps );
+        }
+        else 
+        {
+          env -> err() << "works only if you can distinguish xors in the network";
+        }
+      }
+      else 
+      {
+        mockturtle::lut_mapping<typename Store::element_type, true, mockturtle::cut_enumeration_mf_cut>( *( store<Store>().current() ), ps );
+      }
     }
   }
 

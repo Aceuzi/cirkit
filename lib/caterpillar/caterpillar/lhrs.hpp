@@ -15,7 +15,10 @@
 #include <variant>
 #include <vector>
 
-namespace tweedledum {
+#include <mockturtle/algorithms/cut_enumeration/spectr_cut.hpp>
+#include "mapping_strategies.hpp"
+
+namespace caterpillar {
 
 namespace detail {
 template<class... Ts>
@@ -28,172 +31,6 @@ overloaded(Ts...)->overloaded<Ts...>;
 
 namespace mt = mockturtle;
 
-struct compute_action {};
-struct uncompute_action {};
-struct compute_inplace_action {
-	uint32_t target_index;
-};
-struct uncompute_inplace_action {
-	uint32_t target_index;
-};
-
-using mapping_strategy_action
-    = std::variant<compute_action, uncompute_action, compute_inplace_action, uncompute_inplace_action>;
-
-template<class LogicNetwork>
-class pebbling_mapping_strategy {
-	/* returns the method foreach_step */
-	pebbling_mapping_strategy(LogicNetwork const& ntk)
-	{
-
-	}
-	
-	template<class Fn>
-	inline void foreach_step(Fn&& fn) const
-	{
-		for (auto const& [n, a] : steps)
-			fn(n, a);
-	}
-
-private:
-	std::vector<std::pair<mt::node<LogicNetwork>, mapping_strategy_action>> steps;
-
-};
-
-template<class LogicNetwork>
-class bennett_mapping_strategy {
-public:
-	bennett_mapping_strategy(LogicNetwork const& ntk)
-	{
-		// clang-format off
-		static_assert(mt::is_network_type_v<LogicNetwork>, "LogicNetwork is not a network type");
-		static_assert(mt::has_foreach_po_v<LogicNetwork>, "LogicNetwork does not implement the foreach_po method");
-		static_assert(mt::has_is_constant_v<LogicNetwork>, "LogicNetwork does not implement the is_constant method");
-		static_assert(mt::has_is_pi_v<LogicNetwork>, "LogicNetwork does not implement the is_pi method");
-		static_assert(mt::has_get_node_v<LogicNetwork>, "LogicNetwork does not implement the get_node method");
-		// clang-format on
-
-		std::unordered_set<mt::node<LogicNetwork>> drivers;
-		ntk.foreach_po([&](auto const& f) { drivers.insert(ntk.get_node(f)); });
-
-		auto it = steps.begin();
-		mt::topo_view view{ntk};
-		view.foreach_node([&](auto n) {
-			if (ntk.is_constant(n) || ntk.is_pi(n))
-				return true;
-
-			/* compute step */
-			it = steps.insert(it, {n, compute_action{}});
-			++it;
-
-			if (!drivers.count(n))
-				it = steps.insert(it, {n, uncompute_action{}});
-
-			return true;
-		});
-	}
-
-	template<class Fn>
-	inline void foreach_step(Fn&& fn) const
-	{
-		for (auto const& [n, a] : steps)
-			fn(n, a);
-	}
-
-private:
-	std::vector<std::pair<mt::node<LogicNetwork>, mapping_strategy_action>> steps;
-};
-
-template<class LogicNetwork>
-class bennett_inplace_mapping_strategy {
-public:
-	bennett_inplace_mapping_strategy(LogicNetwork const& ntk)
-	{
-		// clang-format off
-		static_assert(mt::is_network_type_v<LogicNetwork>, "LogicNetwork is not a network type");
-		static_assert(mt::has_foreach_po_v<LogicNetwork>, "LogicNetwork does not implement the foreach_po method");
-		static_assert(mt::has_is_constant_v<LogicNetwork>, "LogicNetwork does not implement the is_constant method");
-		static_assert(mt::has_is_pi_v<LogicNetwork>, "LogicNetwork does not implement the is_pi method");
-		static_assert(mt::has_get_node_v<LogicNetwork>, "LogicNetwork does not implement the get_node method");
-		static_assert(mt::has_node_to_index_v<LogicNetwork>, "LogicNetwork does not implement the node_to_index method");
-		static_assert(mt::has_clear_values_v<LogicNetwork>, "LogicNetwork does not implement the clear_values method");
-		static_assert(mt::has_set_value_v<LogicNetwork>, "LogicNetwork does not implement the set_value method");
-		static_assert(mt::has_decr_value_v<LogicNetwork>, "LogicNetwork does not implement the decr_value method");
-		static_assert(mt::has_fanout_size_v<LogicNetwork>, "LogicNetwork does not implement the fanout_size method");
-		static_assert(mt::has_foreach_fanin_v<LogicNetwork>, "LogicNetwork does not implement the foreach_fanin method");
-		// clang-format on
-
-		std::unordered_set<mt::node<LogicNetwork>> drivers;
-		ntk.foreach_po([&](auto const& f) { drivers.insert(ntk.get_node(f)); });
-
-		ntk.clear_values();
-		ntk.foreach_node([&](const auto& n) { ntk.set_value(n, ntk.fanout_size(n)); });
-
-		auto it = steps.begin();
-		//mt::topo_view view{ntk};
-		ntk.foreach_node([&](auto n) {
-			if (ntk.is_constant(n) || ntk.is_pi(n))
-				return true;
-
-			/* decrease reference counts and mark potential target for inplace */
-			int target{-1};
-			ntk.foreach_fanin(n, [&](auto f) {
-				if (ntk.decr_value(ntk.get_node(f)) == 0) {
-					if (target == -1) {
-						target = ntk.node_to_index(ntk.get_node(f));
-					}
-				}
-			});
-
-			/* check for inplace (only if there is possible target and node is not an output driver) */
-			if (target != -1 && !drivers.count(n)) {
-				if constexpr (mt::has_is_xor_v<LogicNetwork>) {
-					if (ntk.is_xor(n)) {
-						it = steps.insert(it, {n, compute_inplace_action{
-						                              static_cast<uint32_t>(
-						                                  target)}});
-						++it;
-						it = steps.insert(it, {n, uncompute_inplace_action{
-						                              static_cast<uint32_t>(
-						                                  target)}});
-						return true;
-					}
-				}
-				if constexpr (mt::has_is_xor3_v<LogicNetwork>) {
-					if (ntk.is_xor3(n)) {
-						it = steps.insert(it, {n, compute_inplace_action{
-						                              static_cast<uint32_t>(
-						                                  target)}});
-						++it;
-						it = steps.insert(it, {n, uncompute_inplace_action{
-						                              static_cast<uint32_t>(
-						                                  target)}});
-						return true;
-					}
-				}
-			}
-
-			/* compute step */
-			it = steps.insert(it, {n, compute_action{}});
-			++it;
-
-			if (!drivers.count(n))
-				it = steps.insert(it, {n, uncompute_action{}});
-
-			return true;
-		});
-	}
-
-	template<class Fn>
-	inline void foreach_step(Fn&& fn) const
-	{
-		for (auto const& [n, a] : steps)
-			fn(n, a);
-	}
-
-private:
-	std::vector<std::pair<mt::node<LogicNetwork>, mapping_strategy_action>> steps;
-};
 
 struct logic_network_synthesis_params {
 	bool verbose{false};
@@ -219,7 +56,7 @@ public:
 		if (ntk.get_node(ntk.get_constant(false)) != ntk.get_node(ntk.get_constant(true)))
 			prepare_constant(true);
 
-		MappingStrategy strategy{ntk};
+		MappingStrategy strategy(ntk);
 		strategy.foreach_step([&](auto node, auto action) {
 			std::visit(
 			    overloaded{
@@ -282,7 +119,7 @@ private:
 		node_to_qubit[n] = qnet.num_qubits();
 		qnet.add_qubit();
 		if (v)
-			qnet.add_gate(gate_kinds_t::pauli_x, node_to_qubit[n]);
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, node_to_qubit[n]);
 	}
 
 	uint32_t request_ancilla()
@@ -402,13 +239,30 @@ private:
 				return;
 			}
 		}
-		if constexpr (mt::has_node_function_v<LogicNetwork>) {
-			// In this case, the procedure works a bit different and retrieves the
-			// controls directly as mapped qubits.  We assume that the inputs cannot
-			// be complemented, e.g., in the case of k-LUT networks.
-			const auto controls = get_fanin_as_qubits(node);
-			compute_lut(ntk.node_function(node), controls, t);
+		if constexpr (mt::has_node_function_v<LogicNetwork>)
+		{
+			kitty::dynamic_truth_table tt = ntk.node_function(node);
+			kitty::dynamic_truth_table clone (tt.num_vars());
+			kitty::create_symmetric( clone, mt::detail::odd_bits());
+
+			if(tt == clone)
+			{
+				const auto controls = get_fanin_as_qubits(node);
+				compute_xor_block(controls, t);
+
+			}
+			else
+			{
+				// In this case, the procedure works a bit different and retrieves the
+				// controls directly as mapped qubits.  We assume that the inputs cannot
+				// be complemented, e.g., in the case of k-LUT networks.
+				const auto controls = get_fanin_as_qubits(node);
+				compute_lut(ntk.node_function(node), controls, t);
+			}
+			
 		}
+
+
 	}
 
 	void compute_node_inplace(mt::node<LogicNetwork> const& node, uint32_t t)
@@ -451,70 +305,76 @@ private:
 	void compute_and(uint32_t c1, uint32_t c2, bool p1, bool p2, uint32_t t)
 	{
 		if (p1)
-			qnet.add_gate(gate_kinds_t::pauli_x, c1);
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, c1);
 		if (p2)
-			qnet.add_gate(gate_kinds_t::pauli_x, c2);
-		qnet.add_gate(gate_kinds_t::mcx, std::vector<uint32_t>{{c1, c2}},
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, c2);
+		qnet.add_gate(tweedledum::gate_kinds_t::mcx, std::vector<uint32_t>{{c1, c2}},
 		              std::vector<uint32_t>{{t}});
 		if (p2)
-			qnet.add_gate(gate_kinds_t::pauli_x, c2);
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, c2);
 		if (p1)
-			qnet.add_gate(gate_kinds_t::pauli_x, c1);
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, c1);
 	}
 
 	void compute_or(uint32_t c1, uint32_t c2, bool p1, bool p2, uint32_t t)
 	{
 		if (!p1)
-			qnet.add_gate(gate_kinds_t::pauli_x, c1);
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, c1);
 		if (!p2)
-			qnet.add_gate(gate_kinds_t::pauli_x, c2);
-		qnet.add_gate(gate_kinds_t::mcx, std::vector<uint32_t>{{c1, c2}},
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, c2);
+		qnet.add_gate(tweedledum::gate_kinds_t::mcx, std::vector<uint32_t>{{c1, c2}},
 		              std::vector<uint32_t>{{t}});
-		qnet.add_gate(gate_kinds_t::pauli_x, t);
+		qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, t);
 		if (!p2)
-			qnet.add_gate(gate_kinds_t::pauli_x, c2);
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, c2);
 		if (!p1)
-			qnet.add_gate(gate_kinds_t::pauli_x, c1);
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, c1);
 	}
 
 	void compute_xor(uint32_t c1, uint32_t c2, bool inv, uint32_t t)
 	{
-		qnet.add_gate(gate_kinds_t::cx, c1, t);
-		qnet.add_gate(gate_kinds_t::cx, c2, t);
+		qnet.add_gate(tweedledum::gate_kinds_t::cx, c1, t);
+		qnet.add_gate(tweedledum::gate_kinds_t::cx, c2, t);
 		if (inv)
-			qnet.add_gate(gate_kinds_t::pauli_x, t);
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, t);
 	}
 
 	void compute_xor3(uint32_t c1, uint32_t c2, uint32_t c3, bool inv, uint32_t t)
 	{
-		qnet.add_gate(gate_kinds_t::cx, c1, t);
-		qnet.add_gate(gate_kinds_t::cx, c2, t);
-		qnet.add_gate(gate_kinds_t::cx, c3, t);
+		qnet.add_gate(tweedledum::gate_kinds_t::cx, c1, t);
+		qnet.add_gate(tweedledum::gate_kinds_t::cx, c2, t);
+		qnet.add_gate(tweedledum::gate_kinds_t::cx, c3, t);
 		if (inv)
-			qnet.add_gate(gate_kinds_t::pauli_x, t);
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, t);
 	}
 
 	void compute_maj(uint32_t c1, uint32_t c2, uint32_t c3, bool p1, bool p2, bool p3, uint32_t t)
 	{
 		if (p1)
-			qnet.add_gate(gate_kinds_t::pauli_x, c1);
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, c1);
 		if (!p2) /* control 2 behaves opposite */
-			qnet.add_gate(gate_kinds_t::pauli_x, c2);
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, c2);
 		if (p3)
-			qnet.add_gate(gate_kinds_t::pauli_x, c3);
-		qnet.add_gate(gate_kinds_t::cx, c1, c2);
-		qnet.add_gate(gate_kinds_t::cx, c3, c1);
-		qnet.add_gate(gate_kinds_t::cx, c3, t);
-		qnet.add_gate(gate_kinds_t::mcx, std::vector<uint32_t>{{c1, c2}},
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, c3);
+		qnet.add_gate(tweedledum::gate_kinds_t::cx, c1, c2);
+		qnet.add_gate(tweedledum::gate_kinds_t::cx, c3, c1);
+		qnet.add_gate(tweedledum::gate_kinds_t::cx, c3, t);
+		qnet.add_gate(tweedledum::gate_kinds_t::mcx, std::vector<uint32_t>{{c1, c2}},
 		              std::vector<uint32_t>{{t}});
-		qnet.add_gate(gate_kinds_t::cx, c3, c1);
-		qnet.add_gate(gate_kinds_t::cx, c1, c2);
+		qnet.add_gate(tweedledum::gate_kinds_t::cx, c3, c1);
+		qnet.add_gate(tweedledum::gate_kinds_t::cx, c1, c2);
 		if (p3)
-			qnet.add_gate(gate_kinds_t::pauli_x, c3);
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, c3);
 		if (!p2)
-			qnet.add_gate(gate_kinds_t::pauli_x, c2);
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, c2);
 		if (p1)
-			qnet.add_gate(gate_kinds_t::pauli_x, c1);
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, c1);
+	}
+
+	void compute_xor_block(std::vector<uint32_t> const& controls, uint32_t t)
+	{
+		for(auto c : controls)
+			qnet.add_gate(tweedledum::gate_kinds_t::cx, c, t);
 	}
 
 	void compute_lut(kitty::dynamic_truth_table const& function,
@@ -522,38 +382,38 @@ private:
 	{
 		auto qubit_map = controls;
 		qubit_map.push_back(t);
-		stg_from_pprm()(qnet, function, qubit_map);
+		tweedledum::stg_from_pprm()(qnet, function, qubit_map);
 	}
 
 	void compute_xor_inplace(uint32_t c1, uint32_t c2, bool inv, uint32_t t)
 	{
 		if (c1 == t) {
-			qnet.add_gate(gate_kinds_t::cx, c2, c1);
+			qnet.add_gate(tweedledum::gate_kinds_t::cx, c2, c1);
 		} else if (c2 == t) {
-			qnet.add_gate(gate_kinds_t::cx, c1, c2);
+			qnet.add_gate(tweedledum::gate_kinds_t::cx, c1, c2);
 		} else {
 			std::cerr << "[e] target does not match any control in in-place\n";
 		}
 		if (inv)
-			qnet.add_gate(gate_kinds_t::pauli_x, t);
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, t);
 	}
 
 	void compute_xor3_inplace(uint32_t c1, uint32_t c2, uint32_t c3, bool inv, uint32_t t)
 	{
 		if (c1 == t) {
-			qnet.add_gate(gate_kinds_t::cx, c2, c1);
-			qnet.add_gate(gate_kinds_t::cx, c3, c1);
+			qnet.add_gate(tweedledum::gate_kinds_t::cx, c2, c1);
+			qnet.add_gate(tweedledum::gate_kinds_t::cx, c3, c1);
 		} else if (c2 == t) {
-			qnet.add_gate(gate_kinds_t::cx, c1, c2);
-			qnet.add_gate(gate_kinds_t::cx, c3, c2);
+			qnet.add_gate(tweedledum::gate_kinds_t::cx, c1, c2);
+			qnet.add_gate(tweedledum::gate_kinds_t::cx, c3, c2);
 		} else if (c3 == t) {
-			qnet.add_gate(gate_kinds_t::cx, c1, c3);
-			qnet.add_gate(gate_kinds_t::cx, c2, c3);
+			qnet.add_gate(tweedledum::gate_kinds_t::cx, c1, c3);
+			qnet.add_gate(tweedledum::gate_kinds_t::cx, c2, c3);
 		} else {
 			std::cerr << "[e] target does not match any control in in-place\n";
 		}
 		if (inv)
-			qnet.add_gate(gate_kinds_t::pauli_x, t);
+			qnet.add_gate(tweedledum::gate_kinds_t::pauli_x, t);
 	}
 
 private:
@@ -589,4 +449,4 @@ void logic_network_synthesis(QuantumNetwork& qnet, LogicNetwork const& ntk,
 	impl.run();
 }
 
-} /* namespace tweedledum */
+} /* namespace caterpillar */

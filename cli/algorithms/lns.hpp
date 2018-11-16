@@ -31,20 +31,20 @@ public:
     using LogicNetwork = typename Store::element_type;
     if ( is_set( "pebbling" ) )
     {
-      tweedledum::logic_network_synthesis<qcircuit_t, LogicNetwork, typename tweedledum::pebbling_mapping_strategy<LogicNetwork>>( circs.current(), *( store<Store>().current() ), ps );
+      caterpillar::logic_network_synthesis<qcircuit_t, LogicNetwork, typename caterpillar::pebbling_mapping_strategy<LogicNetwork>>( circs.current(), *( store<Store>().current() ), ps );
     }
     if ( is_set( "outofplace" ) )
     {
-      tweedledum::logic_network_synthesis<qcircuit_t, LogicNetwork, typename tweedledum::bennett_mapping_strategy<LogicNetwork>>( circs.current(), *( store<Store>().current() ), ps );
+      caterpillar::logic_network_synthesis<qcircuit_t, LogicNetwork, typename caterpillar::bennett_mapping_strategy<LogicNetwork>>( circs.current(), *( store<Store>().current() ), ps );
     }
     else
     {
-      tweedledum::logic_network_synthesis<qcircuit_t, LogicNetwork, typename tweedledum::bennett_inplace_mapping_strategy<LogicNetwork>>( circs.current(), *( store<Store>().current() ), ps );
+      caterpillar::logic_network_synthesis<qcircuit_t, LogicNetwork, typename caterpillar::bennett_inplace_mapping_strategy<LogicNetwork>>( circs.current(), *( store<Store>().current() ), ps );
     }
   }
 
 private:
-  tweedledum::logic_network_synthesis_params ps;
+  caterpillar::logic_network_synthesis_params ps;
 };
 
 ALICE_ADD_COMMAND( lns, "Synthesis" )
