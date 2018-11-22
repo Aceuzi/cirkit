@@ -15,6 +15,7 @@ public:
   {
     add_option( "--qmapping", qmapping, "qubit mapping", true )->set_type_name( "strategy in {bennett=0, bennett inplace=1, pebbling=2}" );
     add_option( "--gmapping", gmapping, "STG gate mapping", true )->set_type_name( "strategy in {PPRM=0, PKRM=1, spectrum=2}" );
+    add_option( "--pebble_limit", pebble_limit, "Maximum number of pebbles for strategy 2" );
     add_flag( "-v,--verbose", "be verbose" );
   }
 
@@ -47,6 +48,10 @@ private:
     using LogicNetwork = typename Store::element_type;
 
     ps.verbose = is_set( "verbose" );
+    if ( is_set( "pebble_limit" ) )
+    {
+      ps.pebble_limit = pebble_limit;
+    }
     auto& circs = store<qcircuit_t>();
     if ( circs.empty() || is_set( "new" ) )
     {
@@ -76,10 +81,9 @@ public:
   nlohmann::json log() const override
   {
     return {
-      {"qmapping", qmapping},
-      {"gmapping", gmapping},
-      {"time_total", mockturtle::to_seconds( st.time_total )}
-    };
+        {"qmapping", qmapping},
+        {"gmapping", gmapping},
+        {"time_total", mockturtle::to_seconds( st.time_total )}};
   }
 
 private:
@@ -88,6 +92,7 @@ private:
 
   unsigned qmapping{0u};
   unsigned gmapping{0u};
+  uint32_t pebble_limit;
 };
 
 ALICE_ADD_COMMAND( lns, "Synthesis" )

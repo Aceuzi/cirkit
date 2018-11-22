@@ -35,6 +35,8 @@ namespace mt = mockturtle;
 
 
 struct logic_network_synthesis_params {
+	/*! \brief Maximum number of pebbles to use, if supported by mapping strategy (0 means no limit) */
+	uint32_t pebble_limit{0u};
 	bool verbose{false};
 };
 
@@ -74,6 +76,10 @@ public:
 			prepare_constant(true);
 
 		MappingStrategy strategy(ntk);
+		if constexpr (has_set_pebble_limit_v<MappingStrategy>)
+		{
+			strategy.set_pebble_limit(ps.pebble_limit);
+		}
 		strategy.foreach_step([&](auto node, auto action) {
 			std::visit(
 			    overloaded{
