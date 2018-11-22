@@ -1,3 +1,8 @@
+/*------------------------------------------------------------------------------
+| This file is distributed under the MIT License.
+| See accompanying file /LICENSE for details.
+| Author(s): Mathias Soeken and Giulia Meuli
+*-----------------------------------------------------------------------------*/
 #include "sat.hpp"
 
 namespace caterpillar
@@ -26,10 +31,13 @@ public:
             static_assert(mt::has_index_to_node_v<LogicNetwork>, "LogicNetwork does not implement the index_to_node method");
     // clang-format on
     
-		auto man =  pebble_solver_man<LogicNetwork>(ntk, pebbles);
+
+		auto man = pebble_solver_man<LogicNetwork>(ntk, pebbles);
     steps = man.get_steps();
-		
+
   }
+
+
 
   template<class Fn>
   inline void foreach_step( Fn&& fn ) const
@@ -37,7 +45,6 @@ public:
     for ( auto const& [n, a] : steps )
       fn( n, a );
   }
-
 private:
   std::vector<std::pair<mt::node<LogicNetwork>, mapping_strategy_action>> steps;
 };

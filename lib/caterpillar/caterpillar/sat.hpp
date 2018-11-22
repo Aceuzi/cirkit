@@ -1,3 +1,8 @@
+/*------------------------------------------------------------------------------
+| This file is distributed under the MIT License.
+| See accompanying file /LICENSE for details.
+| Author(s): Giulia Meuli
+*-----------------------------------------------------------------------------*/
 #include <percy/solvers/bsat2.hpp>
 #include <variant>
 
@@ -27,43 +32,50 @@ class pebble_solver
   using Steps = std::vector<std::pair<mockturtle::node<Network>, mapping_strategy_action>>;
 
 public:
-  pebble_solver( Network net, uint8_t pebbles )
+  pebble_solver( Network const& net, uint8_t pebbles )
       : _net( net ),
         _pebbles( pebbles ),
-        _nr_steps( 0 ),
-        _nr_gates( net.num_gates() )
+        _nr_gates( net.num_gates())
   {
-    _net.foreach_gate( [&]( auto a, auto i ) {
+
+    net.foreach_gate( [&]( auto a, auto i ) {
+    
       gate_to_index[a] = i;
       index_to_gate[i] = a;
-    } );
+      
+    });
 
-    _net.foreach_po( [&]( auto po ) {
-      o_set.push_back( _net.get_node( po ) );
-    } );
+    net.foreach_po( [&]( auto po ) {
+      o_set.push_back( net.get_node( po ) );
+    });
+
+    for(auto e : gate_to_index)
+      std::cout <<"gate: " << e.first << ", index: " << gate_to_index[e.first] << std::endl;
+
+     
   }
 
   inline void add_edge_clause( int const& p, int const& p_n, int const& ch, int const& ch_n )
   {
     int h[3];
-    h[0] = pabc::Abc_Var2Lit( p, 0 );
-    h[1] = pabc::Abc_Var2Lit( p_n, 1 );
-    h[2] = pabc::Abc_Var2Lit( ch, 1 );
+    h[0] = pabc::Abc_Var2Lit( p, 1 );
+    h[1] = pabc::Abc_Var2Lit( p_n, 0 );
+    h[2] = pabc::Abc_Var2Lit( ch, 0 );
     solver.add_clause( h, h + 3 );
 
     h[0] = pabc::Abc_Var2Lit( p, 1 );
     h[1] = pabc::Abc_Var2Lit( p_n, 0 );
-    h[2] = pabc::Abc_Var2Lit( ch, 1 );
+    h[2] = pabc::Abc_Var2Lit( ch_n, 0 );
     solver.add_clause( h, h + 3 );
 
     h[0] = pabc::Abc_Var2Lit( p, 0 );
     h[1] = pabc::Abc_Var2Lit( p_n, 1 );
-    h[2] = pabc::Abc_Var2Lit( ch_n, 1 );
+    h[2] = pabc::Abc_Var2Lit( ch, 0 );
     solver.add_clause( h, h + 3 );
 
-    h[0] = pabc::Abc_Var2Lit( p, 1 );
-    h[1] = pabc::Abc_Var2Lit( p_n, 0 );
-    h[2] = pabc::Abc_Var2Lit( ch_n, 1 );
+    h[0] = pabc::Abc_Var2Lit( p, 0 );
+    h[1] = pabc::Abc_Var2Lit( p_n, 1 );
+    h[2] = pabc::Abc_Var2Lit( ch_n, 0 );
     solver.add_clause( h, h + 3 );
   }
 
@@ -71,88 +83,80 @@ public:
   {
     int lit[1];
 
+    solver.set_nr_vars(_nr_gates);
     /* set constraint that everything is unpebbled */
     for ( int v = 0; v < _nr_gates; v++ )
     {
-      lit[0] = pabc::Abc_Var2Lit( v, 0 );
+      lit[0] = pabc::Abc_Var2Lit( v, 1 );// zero is not negated
       solver.add_clause( lit, lit + 1 );
     }
+    
   }
 
   void add_step()
   {
     _nr_steps++;
+    solver.set_nr_vars( _nr_gates * (1 + _nr_steps) );
 
     /* encode move */
     _net.foreach_gate( [&]( auto n, auto i ) //n node i counter
-                       {
-                         auto p = ( _nr_steps - 1 ) * _nr_gates + i;
-                         auto p_next = (_nr_steps)*_nr_gates + i;
+    {
+      auto p = ( _nr_steps - 1 ) * _nr_gates + i;
+      auto p_next = (_nr_steps)*_nr_gates + i;
 
-                         _net.foreach_fanin( n, [&]( auto ch ) {
-                           // if pi not use it
-                           auto ch_node = _net.get_node( ch );
-                           if ( !_net.is_pi( ch_node ) )
-                           {
-                             auto ch = gate_to_index[ch_node] + ( _nr_steps - 1 ) * _nr_gates;
-                             auto ch_next = gate_to_index[ch_node] + (_nr_steps)*_nr_gates;
-
-                             add_edge_clause( p, p_next, ch, ch_next );
-                           }
-                         } );
-                       } );
+      _net.foreach_fanin( n, [&]( auto ch ) {
+        
+        auto ch_node = _net.get_node( ch );
+        if ( !_net.is_pi( ch_node ) )
+        {
+          auto ch = gate_to_index[ch_node] + ( _nr_steps - 1 ) * _nr_gates;
+          auto ch_next = gate_to_index[ch_node] + (_nr_steps)*_nr_gates;
+          add_edge_clause( p, p_next, ch, ch_next );
+        }
+      } );
+    } );
 
     /* cardinality constraint */
-  }
 
-  void add_final()
-  {
-    int p[1];
-    _net.foreach_gate( [&]( auto n, auto i ) //n node i counter
-                       {
-                         if ( std::find( o_set.begin(), o_set.end(), n ) != o_set.end() )
-                         {
-                           p[0] = pabc::Abc_Var2Lit( (_nr_steps)*_net.num_gates() + i, 1 );
-                         }
-                         else
-                         {
-                           p[0] = pabc::Abc_Var2Lit( (_nr_steps)*_net.num_gates() + i, 0 );
-                         }
-
-                         solver.add_clause( p, p + 1 );
-                       } );
-  }
-
-  void remove_final()
-  {
-    int p[_nr_gates];
-    _net.foreach_gate( [&]( auto n, auto i ) {
-      if ( std::find( o_set.begin(), o_set.end(), n ) != o_set.end() )
-      {
-        p[i] = pabc::Abc_Var2Lit( (_nr_steps)*_net.num_gates() + i, 0 );
-      }
-      else
-      {
-        p[i] = pabc::Abc_Var2Lit( (_nr_steps)*_net.num_gates() + i, 1 );
-      }
-    } );
-    solver.add_clause( p, p + _nr_gates );
-
+    
   }
 
   percy::synth_result solve()
   {
-    return solver.solve( 0 );
+    std::vector<int> p (_nr_gates);
+    _net.foreach_gate( [&]( auto n, auto i ) //n node i counter
+    {
+      if ( std::find( o_set.begin(), o_set.end(), n ) != o_set.end() )//is out -> pos state
+      {
+        p[i] = pabc::Abc_Var2Lit( (_nr_steps)*_net.num_gates() + i, 0 );
+      }
+      else //is NOT out -> neg state
+      {
+        p[i] = pabc::Abc_Var2Lit( (_nr_steps)*_net.num_gates() + i, 1 );
+      }
+    });
+    return solver.solve( &p[0], &p[0] + _nr_gates, 0 );
+  }
+  
+  void restart()
+  {
+    solver.restart();
+  }
+
+  void set_nr_vars(int num_steps)
+  {
+    solver.set_nr_vars(_nr_gates+num_steps*_nr_gates);
   }
 
   Steps extract_result()
   {
-    std::vector<std::vector<int>> vals_step;
-        std::vector<int>
-            computed;
+    std::vector<std::vector<int>> vals_step (_nr_steps+1);
+    std::vector<int> computed;
     Steps steps;
+
+    
     int c = 0;
-    for ( int i = 0; i < _nr_steps; i++ )
+    for ( int i = 0; i <= _nr_steps; i++ )
     {
       for ( int j = 0; j < _nr_gates; j++ )
       {
@@ -161,21 +165,64 @@ public:
       }
     }
 
-    for ( int s = 1; s < _nr_steps; s++ )
+    std::cout<< std::endl; 
+    int s =0;
+    for(auto step: vals_step)
+    {
+      std::cout << "step " << s << ": ";
+      s++;
+      for (auto node: step)
+      {
+        std::cout << node;
+      }
+      std::cout<< std::endl;
+
+    }
+  
+    for ( int s = 1; s <= _nr_steps; s++ )
     {
       for ( int n = 0; n < _nr_gates; n++ )
       {
         if ( vals_step[s][n] != vals_step[s - 1][n] )
         {
           auto id = std::find( computed.begin(), computed.end(), n );
+          bool inplace = false;
+          mockturtle::node<Network> target;
+
+          kitty::dynamic_truth_table tt = _net.node_function(gate_to_index[n]);
+			    kitty::dynamic_truth_table clone (tt.num_vars());
+			    kitty::create_symmetric( clone, mockturtle::detail::odd_bits());
+			
+          if( (std::find( o_set.begin(), o_set.end(), index_to_gate[n] ) == o_set.end())
+              && (clone == tt) )//not out and xor function
+          {
+            _net.foreach_fanin(index_to_gate[n], [&] (auto ch_signal)
+            {
+              auto ch_node = _net.get_node(ch_signal);
+              if (_net.fanout_size(ch_node) == 1)
+              {
+                inplace = true;
+                target =  ch_node ;
+              }
+            });
+          }
+            
           if ( id != computed.end() )
           {
-            steps.push_back( { n, uncompute_action{} } );
+            if(inplace)
+              steps.push_back( {index_to_gate[n], uncompute_inplace_action{static_cast<uint32_t>(
+                                               target )}} );
+            else 
+              steps.push_back( {index_to_gate[n], uncompute_action{}} );
             computed.erase( id );
           }
           else
           {
-            steps.push_back( { n, compute_action{} } );
+            if(inplace)
+              steps.push_back( {index_to_gate[n], compute_inplace_action{static_cast<uint32_t>(
+                                               target )}} );
+            else 
+              steps.push_back( {index_to_gate[n], compute_action{}} );
             computed.push_back( n );
           }
         }
@@ -191,10 +238,10 @@ private:
   std::vector<int> o_set;
 
   percy::bsat_wrapper solver;
+  Network const& _net;
   uint32_t _pebbles;
-  Network _net;
-  uint32_t _nr_steps;
   uint32_t _nr_gates;
+  uint32_t _nr_steps = 0;
 };
 
 template<typename Network>
@@ -206,25 +253,38 @@ public:
   pebble_solver_man( Network const& ntk, int const pebbles )
       : _ntk( ntk ), _pebbles( pebbles ) {}
 
+  bool solve_nr_steps(pebble_solver<Network>& p_solver)
+  { 
+    if(p_solver.solve() == percy::success)
+    {
+      steps = p_solver.extract_result();
+      return false;
+    }
+    else
+    {
+      return true;
+    }
+  }
+
   Steps get_steps()
   {
     pebble_solver<Network> p_solver( _ntk, _pebbles );
 
-    p_solver.initialize();
-    p_solver.add_final();
+    p_solver.initialize(); // initial clauses and set the number of variables
 
-    while ( p_solver.solve() == percy::failure )
+    while(solve_nr_steps(p_solver))
     {
-      p_solver.remove_final();
       p_solver.add_step();
-      p_solver.add_final();
     }
-    return p_solver.extract_result();
+
+    return steps;
   }
 
 private:
-  Network _ntk;
+  Network const& _ntk;
   int _pebbles;
+
+  Steps steps;
 };
 
 } // namespace caterpillar

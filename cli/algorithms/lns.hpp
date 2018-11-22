@@ -33,7 +33,7 @@ public:
     {
       caterpillar::logic_network_synthesis<qcircuit_t, LogicNetwork, typename caterpillar::pebbling_mapping_strategy<LogicNetwork>>( circs.current(), *( store<Store>().current() ), ps );
     }
-    if ( is_set( "outofplace" ) )
+    else if ( is_set( "outofplace" ) )
     {
       caterpillar::logic_network_synthesis<qcircuit_t, LogicNetwork, typename caterpillar::bennett_mapping_strategy<LogicNetwork>>( circs.current(), *( store<Store>().current() ), ps );
     }

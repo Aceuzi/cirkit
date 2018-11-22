@@ -41,7 +41,14 @@ revkit_modules = [
       "lib/mockturtle/lib/sparsepp",
       "lib/mockturtle/include"
     ],
-    define_macros=[('ALICE_PYTHON', '1'), ('FMT_HEADER_ONLY', '1')],
+    define_macros=[
+      ('ALICE_PYTHON', '1'),
+      ('FMT_HEADER_ONLY', '1'),
+      ('DISABLE_NAUTY', '1'),
+      ('LIN64', '1'),
+      ('ABC_NAMESPACE', 'pabc'),
+      ('ABC_NO_USE_READLINE', '1')
+    ],
     language='c++'
   )
 ]
@@ -61,6 +68,9 @@ class BuildExt(build_ext):
       opts.append('-Wno-deprecated-declarations')
       opts.append('-Wno-format')
       opts.append('-Wno-switch')
+      opts.append('-isysroot') 
+      opts.append('/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.14.sdk')
+      opts.append('-I/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.14.sdk/System/Library/Frameworks/Tk.framework/Versions/8.5/Headers')
     else:
       opts.append('/std:c++17')
     for ext in self.extensions:

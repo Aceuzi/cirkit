@@ -300,6 +300,12 @@ private:
 				return;
 			}
 		}
+		if constexpr (mt::has_node_function_v<LogicNetwork>)
+		{	
+			const auto controls = get_fanin_as_qubits(node);
+			compute_xor_block(controls, t);
+		}
+
 	}
 
 	void compute_and(uint32_t c1, uint32_t c2, bool p1, bool p2, uint32_t t)
@@ -374,7 +380,10 @@ private:
 	void compute_xor_block(std::vector<uint32_t> const& controls, uint32_t t)
 	{
 		for(auto c : controls)
+		{
+			if(c != t)
 			qnet.add_gate(tweedledum::gate_kinds_t::cx, c, t);
+	}
 	}
 
 	void compute_lut(kitty::dynamic_truth_table const& function,
