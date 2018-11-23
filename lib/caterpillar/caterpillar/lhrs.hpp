@@ -9,11 +9,13 @@
 #include <cstdint>
 #include <mockturtle/traits.hpp>
 #include <mockturtle/utils/node_map.hpp>
+#include <mockturtle/utils/stopwatch.hpp>
 #include <mockturtle/views/topo_view.hpp>
 #include <stack>
 #include <tweedledum/gates/gate_kinds.hpp>
 #include <variant>
 #include <vector>
+#include <fmt/format.h>
 
 #include <mockturtle/algorithms/cut_enumeration/spectr_cut.hpp>
 #include "mapping_strategies.hpp"
@@ -33,30 +35,51 @@ namespace mt = mockturtle;
 
 
 struct logic_network_synthesis_params {
+	/*! \brief Maximum number of pebbles to use, if supported by mapping strategy (0 means no limit) */
+	uint32_t pebble_limit{0u};
 	bool verbose{false};
+};
+
+struct logic_network_synthesis_stats {
+	/*! \brief Total runtime. */
+	mockturtle::stopwatch<>::duration time_total{0};
+
+	void report() const
+	{
+		std::cout << fmt::format( "[i] total time = {:>5.2f} secs\n", mockturtle::to_seconds( time_total ) );
+	}
 };
 
 namespace detail {
 
-template<class QuantumNetwork, class LogicNetwork, class MappingStrategy>
+template<class QuantumNetwork, class LogicNetwork, class MappingStrategy, class SingleTargetGateSynthesisFn>
 class logic_network_synthesis_impl {
 public:
 	logic_network_synthesis_impl(QuantumNetwork& qnet, LogicNetwork const& ntk,
-	                             logic_network_synthesis_params const& ps)
+	                             SingleTargetGateSynthesisFn const& stg_fn,
+	                             logic_network_synthesis_params const& ps,
+	                             logic_network_synthesis_stats& st)
 	    : qnet(qnet)
 	    , ntk(ntk)
+	    , stg_fn(stg_fn)
 	    , ps(ps)
+	    , st(st)
 	    , node_to_qubit(ntk)
 	{}
 
 	void run()
 	{
+		mockturtle::stopwatch t( st.time_total );
 		prepare_inputs();
 		prepare_constant(false);
 		if (ntk.get_node(ntk.get_constant(false)) != ntk.get_node(ntk.get_constant(true)))
 			prepare_constant(true);
 
 		MappingStrategy strategy(ntk);
+		if constexpr (has_set_pebble_limit_v<MappingStrategy>)
+		{
+			strategy.set_pebble_limit(ps.pebble_limit);
+		}
 		strategy.foreach_step([&](auto node, auto action) {
 			std::visit(
 			    overloaded{
@@ -391,7 +414,7 @@ private:
 	{
 		auto qubit_map = controls;
 		qubit_map.push_back(t);
-		tweedledum::stg_from_pprm()(qnet, function, qubit_map);
+		stg_fn(qnet, function, qubit_map);
 	}
 
 	void compute_xor_inplace(uint32_t c1, uint32_t c2, bool inv, uint32_t t)
@@ -428,7 +451,9 @@ private:
 private:
 	QuantumNetwork& qnet;
 	LogicNetwork const& ntk;
+	SingleTargetGateSynthesisFn const& stg_fn;
 	logic_network_synthesis_params const& ps;
+	logic_network_synthesis_stats& st;
 	mt::node_map<uint32_t, LogicNetwork> node_to_qubit;
 	std::stack<uint32_t> free_ancillae;
 };
@@ -446,16 +471,30 @@ private:
  * function.
  */
 template<class QuantumNetwork, class LogicNetwork,
-         class MappingStrategy = bennett_inplace_mapping_strategy<LogicNetwork>>
+         class MappingStrategy = bennett_inplace_mapping_strategy<LogicNetwork>,
+         class SingleTargetGateSynthesisFn = tweedledum::stg_from_pprm>
 void logic_network_synthesis(QuantumNetwork& qnet, LogicNetwork const& ntk,
-                             logic_network_synthesis_params const& ps = {})
+                             SingleTargetGateSynthesisFn const& stg_fn = {},
+                             logic_network_synthesis_params const& ps = {},
+                             logic_network_synthesis_stats* pst = nullptr)
 {
 	static_assert(mt::is_network_type_v<LogicNetwork>, "LogicNetwork is not a network type");
 
-	detail::logic_network_synthesis_impl<QuantumNetwork, LogicNetwork, MappingStrategy> impl(qnet,
-	                                                                                         ntk,
-	                                                                                         ps);
+	logic_network_synthesis_stats st;
+	detail::logic_network_synthesis_impl<QuantumNetwork, LogicNetwork, MappingStrategy, SingleTargetGateSynthesisFn> impl(qnet,
+	                                                                                                                      ntk,
+	                                                                                                                      stg_fn,
+	                                                                                                                      ps, st);
 	impl.run();
+	if ( ps.verbose )
+	{
+		st.report();
+	}
+
+	if ( pst )
+	{
+		*pst = st;
+	}
 }
 
 } /* namespace caterpillar */

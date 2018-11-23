@@ -19,7 +19,9 @@ class get_pybind_include(object):
 revkit_modules = [
   Extension(
     'revkit',
-    ['cli/revkit.cpp'],
+    ['cli/revkit.cpp',
+     'lib/mockturtle/lib/abcsat/satSolver.cpp',
+     'lib/mockturtle/lib/abcsat/satStore.cpp'],
     include_dirs=[
       get_pybind_include(),
       get_pybind_include(user=True),

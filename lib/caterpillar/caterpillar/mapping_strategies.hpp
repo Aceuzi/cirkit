@@ -3,6 +3,8 @@
 | See accompanying file /LICENSE for details.
 | Author(s): Mathias Soeken and Giulia Meuli
 *-----------------------------------------------------------------------------*/
+#include <cstdint>
+
 #include "sat.hpp"
 
 namespace caterpillar
@@ -10,7 +12,20 @@ namespace caterpillar
 
 namespace mt = mockturtle;
 
+#pragma region has_set_pebble_limit
+template<class MappingStrategy, class = void>
+struct has_set_pebble_limit : std::false_type
+{
+};
 
+template<class MappingStrategy>
+struct has_set_pebble_limit<MappingStrategy, std::void_t<decltype( std::declval<MappingStrategy>().set_pebble_limit( uint32_t() ) )>> : std::true_type
+{
+};
+
+template<class MappingStrategy>
+inline constexpr bool has_set_pebble_limit_v = has_set_pebble_limit<MappingStrategy>::value;
+#pragma endregion
 
 template<class LogicNetwork>
 class pebbling_mapping_strategy
@@ -37,6 +52,11 @@ public:
 
   }
 
+  void set_pebble_limit(uint32_t limit)
+  {
+    limit_ = limit;
+  }
+
 
 
   template<class Fn>
@@ -47,6 +67,7 @@ public:
   }
 private:
   std::vector<std::pair<mt::node<LogicNetwork>, mapping_strategy_action>> steps;
+  uint32_t limit_{50u};
 };
 
 template<class LogicNetwork>

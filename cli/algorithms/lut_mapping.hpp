@@ -27,28 +27,34 @@ public:
     }
     else
     {
-      if(is_set("spectralcuts"))
+      if ( is_set( "spectralcuts" ) )
       {
-        if constexpr(mockturtle::has_is_xor_v<typename Store::element_type>)
+        if constexpr ( mockturtle::has_is_xor_v<typename Store::element_type> )
         {
-          mockturtle::lut_mapping<typename Store::element_type, true, mockturtle::cut_enumeration_spectr_cut>( *( store<Store>().current() ), ps );
+          mockturtle::lut_mapping<typename Store::element_type, true, mockturtle::cut_enumeration_spectr_cut>( *( store<Store>().current() ), ps, &st );
         }
-        else 
+        else
         {
-          env -> err() << "works only if you can distinguish xors in the network";
+          env->err() << "[e] works only if you can distinguish XORs in the network\n";
         }
       }
-      else 
+      else
       {
-        mockturtle::lut_mapping<typename Store::element_type, true, mockturtle::cut_enumeration_mf_cut>( *( store<Store>().current() ), ps );
+        mockturtle::lut_mapping<typename Store::element_type, true, mockturtle::cut_enumeration_mf_cut>( *( store<Store>().current() ), ps, &st );
       }
     }
   }
 
+  nlohmann::json log() const override
+  {
+    return {{"time_total", mockturtle::to_seconds( st.time_total )}};
+  }
+
 private:
   mockturtle::lut_mapping_params ps;
+  mockturtle::lut_mapping_stats st;
 };
 
 ALICE_ADD_COMMAND( lut_mapping, "Mapping" )
 
-}
+} // namespace alice
