@@ -32,12 +32,11 @@ class pebble_solver
   using Steps = std::vector<std::pair<mockturtle::node<Network>, mapping_strategy_action>>;
 
 public:
-  pebble_solver( Network const& net, uint8_t pebbles )
+  pebble_solver( Network const& net, uint32_t pebbles )
       : _net( net ),
-        _pebbles( 4 ),
+        _pebbles( pebbles ),
         _nr_gates( net.num_gates())
   {
-
     net.foreach_gate( [&]( auto a, auto i ) {
     
       gate_to_index[a] = i;
@@ -48,11 +47,12 @@ public:
     net.foreach_po( [&]( auto po ) {
       o_set.push_back( net.get_node( po ) );
     });
-
+#if 0
     for(auto e : gate_to_index)
       std::cout <<"gate: " << e.first << ", index: " << gate_to_index[e.first] << std::endl;
+#endif
 
-    extra = _pebbles*(_nr_gates - _pebbles);
+    extra = (_pebbles < _nr_gates)? _pebbles*(_nr_gates - _pebbles) : 0;
   }
 
   inline void add_edge_clause( int const& p, int const& p_n, int const& ch, int const& ch_n )
@@ -90,8 +90,6 @@ public:
       lit[0] = pabc::Abc_Var2Lit( v, 1 );// zero is not negated
       solver.add_clause( lit, lit + 1 );
     }
-
-    std::cout << "initialize" << std::endl;
     
   }
 
@@ -99,7 +97,6 @@ public:
   {
     _nr_steps++;
     solver.set_nr_vars( (_nr_gates + extra) * (1 + _nr_steps ) );
-    std::cout << "set " << (_nr_gates + extra) * (1 + _nr_steps ) << " vars" << std::endl;
 
     /* encode move */
     _net.foreach_gate( [&]( auto n, auto i ) //n node i counter
@@ -119,7 +116,6 @@ public:
       });
     });
 
-    std::cout << "added step" << std::endl;
     /* cardinality constraint */
 
     if(_nr_gates > _pebbles)
@@ -136,8 +132,6 @@ public:
         }
       }
 
-      std::cout << "declared var" << std::endl;
-
       /* constraint */
       //..
       for (int j = 0; j < _nr_gates - _pebbles - 1; j++)
@@ -149,7 +143,6 @@ public:
           to_or[1] = pabc::Abc_Var2Lit( card_vars[j+1][k], 0);
           solver.add_clause(to_or, to_or+2);
 
-          //std::cout << "added clause 1: " << card_vars[j][k] << " || " << card_vars[j+1][k] << std::endl;
         }
       }
 
@@ -160,7 +153,6 @@ public:
         for(int kp = 0; kp <= _pebbles ; kp++)
         {
           int k = kp-1;
-          std::cout << "k: "<< k << " j: " << j << std::endl;
           int to_var_or[3];
 
           if(k == -1)
@@ -169,14 +161,12 @@ public:
             to_var_or[1] = pabc::Abc_Var2Lit( card_vars[j][k+1], 0);
             solver.add_clause(to_var_or, to_var_or+2);
 
-            std::cout << "added clause 1: " << _nr_steps*(_nr_gates + extra) + j + k + 1 << " || " << card_vars[j][k+1] << std::endl;
           }
           else if(k == _pebbles - 1)
           {
             to_var_or[0] = pabc::Abc_Var2Lit( _nr_steps*(_nr_gates + extra) + j + k + 1 , 1);
             to_var_or[1] = pabc::Abc_Var2Lit( card_vars[j][k], 1);
             solver.add_clause(to_var_or, to_var_or+2);
-            std::cout << "added clause 1: " << _nr_steps*(_nr_gates + extra) + j + k + 1 << " || " << card_vars[j][k] << std::endl;
 
           }
           else 
@@ -186,15 +176,12 @@ public:
             to_var_or[2] = pabc::Abc_Var2Lit( card_vars[j][k+1], 0);
             solver.add_clause(to_var_or, to_var_or+3);
 
-            std::cout << "added clause 1: " << _nr_steps*(_nr_gates + extra) + j + k + 1 << " || " <<card_vars[j][k] << " || " << card_vars[j][k+1] << std::endl;
-
           }
         }
       }
       
     }
 
-    std::cout << "constraint2 DONE" << std::endl;
   }
 
   percy::synth_result solve()
@@ -214,16 +201,6 @@ public:
     return solver.solve( &p[0], &p[0] + _nr_gates, 0 );
   }
   
-  void restart()
-  {
-    solver.restart();
-  }
-
-  void set_nr_vars(int num_steps)
-  {
-    solver.set_nr_vars(_nr_gates+num_steps*_nr_gates);
-  }
-
   Steps extract_result()
   {
     std::vector<std::vector<int>> vals_step (_nr_steps+1);
@@ -239,6 +216,7 @@ public:
       }
     }
 
+#if 0    
     std::cout<< std::endl; 
     int s =0;
     for(auto step: vals_step)
@@ -252,7 +230,8 @@ public:
       std::cout<< std::endl;
 
     }
-  
+#endif
+
     for ( int s = 1; s <= _nr_steps; s++ )
     {
       for ( int n = 0; n < _nr_gates; n++ )
@@ -276,7 +255,7 @@ public:
               if (_net.fanout_size(ch_node) == 1)
               {
                 inplace = true;
-                target =  ch_node ;
+                target = ch_node ;
               }
             });
           }
@@ -332,7 +311,6 @@ public:
   { 
     if(p_solver.solve() == percy::success)
     {
-      std::cout << "found solution" << std::endl;
       steps = p_solver.extract_result();
       return false;
     }
@@ -344,6 +322,8 @@ public:
 
   Steps get_steps()
   {
+        			std::cout << "pebble limit = " << _pebbles << "\n";
+
     pebble_solver<Network> p_solver( _ntk, _pebbles );
 
     p_solver.initialize(); // initial clauses and set the number of variables
