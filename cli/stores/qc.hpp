@@ -3,6 +3,7 @@
 #include <fmt/format.h>
 
 #include <tweedledum/gates/mcmt_gate.hpp>
+#include <tweedledum/gates/mcst_gate.hpp>
 #include <tweedledum/io/print.hpp>
 #include <tweedledum/io/quil.hpp>
 #include <tweedledum/io/write_cirq.hpp>
@@ -12,7 +13,7 @@
 
 namespace alice
 {
-using qcircuit_t = tweedledum::netlist<tweedledum::mcmt_gate>;
+using qcircuit_t = tweedledum::netlist<tweedledum::mcst_gate>;
 
 ALICE_ADD_STORE( qcircuit_t, "qc", "q", "Quantum circuit", "Quantum circuits" );
 
