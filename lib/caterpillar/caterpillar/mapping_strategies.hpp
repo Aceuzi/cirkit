@@ -33,7 +33,8 @@ class pebbling_mapping_strategy
   
 public:
   /* returns the method foreach_step */
-  pebbling_mapping_strategy( LogicNetwork const& ntk, uint32_t const pebbles = 0)
+  pebbling_mapping_strategy( LogicNetwork const& ntk)
+  :ntk_(ntk)
   {
 
     // clang-format off
@@ -47,14 +48,12 @@ public:
     // clang-format on
     
 
-		auto man = pebble_solver_man<LogicNetwork>(ntk, pebbles);
-    steps = man.get_steps();
-
   }
 
   void set_pebble_limit(uint32_t limit)
   {
     limit_ = limit;
+
   }
 
 
@@ -62,12 +61,14 @@ public:
   template<class Fn>
   inline void foreach_step( Fn&& fn ) const
   {
-    for ( auto const& [n, a] : steps )
+    auto man = pebble_solver_man<LogicNetwork>(ntk_, limit_);
+    for ( auto const& [n, a] : man.get_steps() )
       fn( n, a );
   }
+
 private:
-  std::vector<std::pair<mt::node<LogicNetwork>, mapping_strategy_action>> steps;
   uint32_t limit_{50u};
+  LogicNetwork const& ntk_;
 };
 
 template<class LogicNetwork>

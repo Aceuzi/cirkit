@@ -71,9 +71,11 @@ private:
     case 1u:
       caterpillar::logic_network_synthesis<qcircuit_t, LogicNetwork, MappingStrategy>( circs.current(), *( store<Store>().current() ), tweedledum::stg_from_pkrm(), ps, &st );
       break;
-    case 2u:
-      caterpillar::logic_network_synthesis<qcircuit_t, LogicNetwork, MappingStrategy>( circs.current(), *( store<Store>().current() ), tweedledum::stg_from_spectrum(), ps, &st );
-      break;
+    case 2u: {
+      tweedledum::stg_from_spectrum_params stg_ps;
+      stg_ps.lin_comb_synth_behavior = tweedledum::stg_from_spectrum_params::never;
+      caterpillar::logic_network_synthesis<qcircuit_t, LogicNetwork, MappingStrategy>( circs.current(), *( store<Store>().current() ), tweedledum::stg_from_spectrum( stg_ps ), ps, &st );
+    } break;
     }
   }
 
