@@ -30,40 +30,41 @@ inline constexpr bool has_set_pebble_limit_v = has_set_pebble_limit<MappingStrat
 template<class LogicNetwork>
 class pebbling_mapping_strategy
 {
-  
+
 public:
   /* returns the method foreach_step */
-  pebbling_mapping_strategy( LogicNetwork const& ntk)
-  :ntk_(ntk)
+  pebbling_mapping_strategy( LogicNetwork const& ntk )
+      : ntk_( ntk )
   {
-
-    // clang-format off
-            static_assert(mt::is_network_type_v<LogicNetwork>, "LogicNetwork is not a network type");
-            static_assert(mt::has_is_pi_v<LogicNetwork>, "LogicNetwork does not implement the is_pi method");
-            static_assert(mt::has_foreach_fanin_v<LogicNetwork>, "LogicNetwork does not implement the foreach_fanin method");
-            static_assert(mt::has_foreach_gate_v<LogicNetwork>, "LogicNetwork does not implement the foreach_gate method");
-            static_assert(mt::has_num_gates_v<LogicNetwork>, "LogicNetwork does not implement the num_gates method");
-            static_assert(mt::has_foreach_po_v<LogicNetwork>, "LogicNetwork does not implement the foreach_po method");
-            static_assert(mt::has_index_to_node_v<LogicNetwork>, "LogicNetwork does not implement the index_to_node method");
-    // clang-format on
-    
-
+    static_assert( mt::is_network_type_v<LogicNetwork>, "LogicNetwork is not a network type" );
+    static_assert( mt::has_is_pi_v<LogicNetwork>, "LogicNetwork does not implement the is_pi method" );
+    static_assert( mt::has_foreach_fanin_v<LogicNetwork>, "LogicNetwork does not implement the foreach_fanin method" );
+    static_assert( mt::has_foreach_gate_v<LogicNetwork>, "LogicNetwork does not implement the foreach_gate method" );
+    static_assert( mt::has_num_gates_v<LogicNetwork>, "LogicNetwork does not implement the num_gates method" );
+    static_assert( mt::has_foreach_po_v<LogicNetwork>, "LogicNetwork does not implement the foreach_po method" );
+    static_assert( mt::has_index_to_node_v<LogicNetwork>, "LogicNetwork does not implement the index_to_node method" );
   }
 
-  void set_pebble_limit(uint32_t limit)
+  void set_pebble_limit( uint32_t limit )
   {
     limit_ = limit;
-
   }
-
-
 
   template<class Fn>
   inline void foreach_step( Fn&& fn ) const
   {
-    auto man = pebble_solver_man<LogicNetwork>(ntk_, limit_);
-    for ( auto const& [n, a] : man.get_steps() )
+    pebble_solver<LogicNetwork> solver( ntk_, limit_ );
+    solver.initialize();
+
+    do
+    {
+      solver.add_step();
+    } while ( solver.solve() != percy::success );
+
+    for ( auto const& [n, a] : solver.extract_result() )
+    {
       fn( n, a );
+    }
   }
 
 private:
@@ -77,13 +78,11 @@ class bennett_mapping_strategy
 public:
   bennett_mapping_strategy( LogicNetwork const& ntk )
   {
-    // clang-format off
-            static_assert(mt::is_network_type_v<LogicNetwork>, "LogicNetwork is not a network type");
-            static_assert(mt::has_foreach_po_v<LogicNetwork>, "LogicNetwork does not implement the foreach_po method");
-            static_assert(mt::has_is_constant_v<LogicNetwork>, "LogicNetwork does not implement the is_constant method");
-            static_assert(mt::has_is_pi_v<LogicNetwork>, "LogicNetwork does not implement the is_pi method");
-            static_assert(mt::has_get_node_v<LogicNetwork>, "LogicNetwork does not implement the get_node method");
-    // clang-format on
+    static_assert( mt::is_network_type_v<LogicNetwork>, "LogicNetwork is not a network type" );
+    static_assert( mt::has_foreach_po_v<LogicNetwork>, "LogicNetwork does not implement the foreach_po method" );
+    static_assert( mt::has_is_constant_v<LogicNetwork>, "LogicNetwork does not implement the is_constant method" );
+    static_assert( mt::has_is_pi_v<LogicNetwork>, "LogicNetwork does not implement the is_pi method" );
+    static_assert( mt::has_get_node_v<LogicNetwork>, "LogicNetwork does not implement the get_node method" );
 
     std::unordered_set<mt::node<LogicNetwork>> drivers;
     ntk.foreach_po( [&]( auto const& f ) { drivers.insert( ntk.get_node( f ) ); } );
@@ -109,7 +108,9 @@ public:
   inline void foreach_step( Fn&& fn ) const
   {
     for ( auto const& [n, a] : steps )
+    {
       fn( n, a );
+    }
   }
 
 private:
@@ -122,19 +123,17 @@ class bennett_inplace_mapping_strategy
 public:
   bennett_inplace_mapping_strategy( LogicNetwork const& ntk )
   {
-    // clang-format off
-            static_assert(mt::is_network_type_v<LogicNetwork>, "LogicNetwork is not a network type");
-            static_assert(mt::has_foreach_po_v<LogicNetwork>, "LogicNetwork does not implement the foreach_po method");
-            static_assert(mt::has_is_constant_v<LogicNetwork>, "LogicNetwork does not implement the is_constant method");
-            static_assert(mt::has_is_pi_v<LogicNetwork>, "LogicNetwork does not implement the is_pi method");
-            static_assert(mt::has_get_node_v<LogicNetwork>, "LogicNetwork does not implement the get_node method");
-            static_assert(mt::has_node_to_index_v<LogicNetwork>, "LogicNetwork does not implement the node_to_index method");
-            static_assert(mt::has_clear_values_v<LogicNetwork>, "LogicNetwork does not implement the clear_values method");
-            static_assert(mt::has_set_value_v<LogicNetwork>, "LogicNetwork does not implement the set_value method");
-            static_assert(mt::has_decr_value_v<LogicNetwork>, "LogicNetwork does not implement the decr_value method");
-            static_assert(mt::has_fanout_size_v<LogicNetwork>, "LogicNetwork does not implement the fanout_size method");
-            static_assert(mt::has_foreach_fanin_v<LogicNetwork>, "LogicNetwork does not implement the foreach_fanin method");
-    // clang-format on
+    static_assert( mt::is_network_type_v<LogicNetwork>, "LogicNetwork is not a network type" );
+    static_assert( mt::has_foreach_po_v<LogicNetwork>, "LogicNetwork does not implement the foreach_po method" );
+    static_assert( mt::has_is_constant_v<LogicNetwork>, "LogicNetwork does not implement the is_constant method" );
+    static_assert( mt::has_is_pi_v<LogicNetwork>, "LogicNetwork does not implement the is_pi method" );
+    static_assert( mt::has_get_node_v<LogicNetwork>, "LogicNetwork does not implement the get_node method" );
+    static_assert( mt::has_node_to_index_v<LogicNetwork>, "LogicNetwork does not implement the node_to_index method" );
+    static_assert( mt::has_clear_values_v<LogicNetwork>, "LogicNetwork does not implement the clear_values method" );
+    static_assert( mt::has_set_value_v<LogicNetwork>, "LogicNetwork does not implement the set_value method" );
+    static_assert( mt::has_decr_value_v<LogicNetwork>, "LogicNetwork does not implement the decr_value method" );
+    static_assert( mt::has_fanout_size_v<LogicNetwork>, "LogicNetwork does not implement the fanout_size method" );
+    static_assert( mt::has_foreach_fanin_v<LogicNetwork>, "LogicNetwork does not implement the foreach_fanin method" );
 
     std::unordered_set<mt::node<LogicNetwork>> drivers;
     ntk.foreach_po( [&]( auto const& f ) { drivers.insert( ntk.get_node( f ) ); } );
@@ -208,7 +207,9 @@ public:
   inline void foreach_step( Fn&& fn ) const
   {
     for ( auto const& [n, a] : steps )
+    {
       fn( n, a );
+    }
   }
 
 private:
