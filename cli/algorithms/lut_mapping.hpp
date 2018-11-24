@@ -1,6 +1,7 @@
 #include <alice/alice.hpp>
 
 #include <mockturtle/algorithms/lut_mapping.hpp>
+#include <mockturtle/algorithms/cut_enumeration/spectr_cut.hpp>
 
 #include "../utils/cirkit_command.hpp"
 
