@@ -57,6 +57,11 @@ public:
     extra = ( _pebbles < _nr_gates ) ? _pebbles * ( _nr_gates - _pebbles ) : 0;
   }
 
+  inline uint32_t current_step() const
+  {
+    return _nr_steps;
+  }
+
   inline void add_edge_clause( int p, int p_n, int ch, int ch_n )
   {
     int h[3];
@@ -115,15 +120,14 @@ public:
     } );
 
     /* cardinality constraint */
-
     if ( ( _pebbles > 0 ) && ( _nr_gates > _pebbles ) )
     {
       /* var declaration */
       std::vector<std::vector<int>> card_vars( _nr_gates - _pebbles );
       auto id_start = _nr_steps * ( _nr_gates + extra ) + _nr_gates;
-      for ( int j = 0; j < ( _nr_gates - _pebbles ); j++ )
+      for ( auto j = 0u; j < _nr_gates - _pebbles; ++j )
       {
-        for ( int k = 0; k < _pebbles; k++ )
+        for ( auto k = 0u; k < _pebbles; ++k )
         {
           card_vars[j].push_back( id_start );
           id_start++;
@@ -131,10 +135,9 @@ public:
       }
 
       /* constraint */
-      //..
-      for ( int j = 0; j < _nr_gates - _pebbles - 1; j++ )
+      for ( auto j = 0u; j < _nr_gates - _pebbles - 1u; j++ )
       {
-        for ( int k = 0; k < _pebbles; k++ )
+        for ( auto k = 0u; k < _pebbles; k++ )
         {
           int to_or[2];
           to_or[0] = pabc::Abc_Var2Lit( card_vars[j][k], 1 );
@@ -143,11 +146,10 @@ public:
         }
       }
 
-      //..
-      for ( int j = 0; j < _nr_gates - _pebbles; j++ )
+      for ( auto j = 0u; j < _nr_gates - _pebbles; j++ )
       {
 
-        for ( int kp = 0; kp <= _pebbles; kp++ )
+        for ( auto kp = 0u; kp <= _pebbles; kp++ )
         {
           int k = kp - 1;
           int to_var_or[3];
@@ -176,13 +178,13 @@ public:
     }
   }
 
-  percy::synth_result solve()
+  percy::synth_result solve( uint32_t conflict_limit )
   {
     std::vector<int> p( _nr_gates );
     _net.foreach_gate( [&]( auto n, auto i ) {
       p[i] = pabc::Abc_Var2Lit( pebble_var( _nr_steps, i ), o_set.count( n ) ? 0 : 1 );
     } );
-    return solver.solve( &p[0], &p[0] + _nr_gates, 0 );
+    return solver.solve( &p[0], &p[0] + _nr_gates, conflict_limit );
   }
 
   inline int pebble_var( int step, int gate )
@@ -215,11 +217,11 @@ public:
           bool inplace = false;
           uint32_t target;
 
+#if 0
           kitty::dynamic_truth_table tt = _net.node_function( gate_to_index[n] );
           auto clone = tt.construct();
           kitty::create_parity( clone );
 
-#if 0
           if ( !o_set.count( index_to_gate[n] ) && clone == tt )
           {
             _net.foreach_fanin(index_to_gate[n], [&] (auto ch_signal)

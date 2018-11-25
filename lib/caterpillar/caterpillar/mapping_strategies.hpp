@@ -7,25 +7,24 @@
 
 #include "sat.hpp"
 
+#include <mockturtle/utils/progress_bar.hpp>
+
 namespace caterpillar
 {
 
 namespace mt = mockturtle;
 
-#pragma region has_set_pebble_limit
-template<class MappingStrategy, class = void>
-struct has_set_pebble_limit : std::false_type
+struct mapping_strategy_params
 {
-};
+  /*! \brief Show progress bar. */
+  bool progress{false};
 
-template<class MappingStrategy>
-struct has_set_pebble_limit<MappingStrategy, std::void_t<decltype( std::declval<MappingStrategy>().set_pebble_limit( uint32_t() ) )>> : std::true_type
-{
-};
+  /*! \brief Maximum number of pebbles to use, if supported by mapping strategy (0 means no limit). */
+  uint32_t pebble_limit{0u};
 
-template<class MappingStrategy>
-inline constexpr bool has_set_pebble_limit_v = has_set_pebble_limit<MappingStrategy>::value;
-#pragma endregion
+  /*! \brief Conflict limit for the SAT solver (0 means no limit). */
+  uint32_t conflict_limit{0u};
+};
 
 template<class LogicNetwork>
 class pebbling_mapping_strategy
@@ -33,8 +32,9 @@ class pebbling_mapping_strategy
 
 public:
   /* returns the method foreach_step */
-  pebbling_mapping_strategy( LogicNetwork const& ntk )
-      : ntk_( ntk )
+  pebbling_mapping_strategy( LogicNetwork const& ntk, mapping_strategy_params const& ps = {} )
+      : _ntk( ntk ),
+        ps( ps )
   {
     static_assert( mt::is_network_type_v<LogicNetwork>, "LogicNetwork is not a network type" );
     static_assert( mt::has_is_pi_v<LogicNetwork>, "LogicNetwork does not implement the is_pi method" );
@@ -45,44 +45,53 @@ public:
     static_assert( mt::has_index_to_node_v<LogicNetwork>, "LogicNetwork does not implement the index_to_node method" );
   }
 
-  void set_pebble_limit( uint32_t limit )
-  {
-    limit_ = limit;
-  }
-
   template<class Fn>
-  inline void foreach_step( Fn&& fn ) const
+  inline bool foreach_step( Fn&& fn ) const
   {
-    pebble_solver<LogicNetwork> solver( ntk_, limit_ );
+    pebble_solver<LogicNetwork> solver( _ntk, ps.pebble_limit );
     solver.initialize();
+
+    mockturtle::progress_bar bar( 100, "|{0}| current step = {1}", ps.progress );
+    percy::synth_result result;
 
     do
     {
+      bar( std::min<uint32_t>( solver.current_step(), 100 ), solver.current_step() );
       solver.add_step();
-    } while ( solver.solve() != percy::success );
+      result = solver.solve( ps.conflict_limit );
+    } while ( result == percy::failure );
+
+    if ( result == percy::timeout )
+    {
+      return false;
+    }
 
     for ( auto const& [n, a] : solver.extract_result() )
     {
       fn( n, a );
     }
+
+    return true;
   }
 
 private:
-  uint32_t limit_{50u};
-  LogicNetwork const& ntk_;
+  LogicNetwork const& _ntk;
+  mapping_strategy_params ps;
 };
 
 template<class LogicNetwork>
 class bennett_mapping_strategy
 {
 public:
-  bennett_mapping_strategy( LogicNetwork const& ntk )
+  bennett_mapping_strategy( LogicNetwork const& ntk, mapping_strategy_params const& ps = {} )
   {
     static_assert( mt::is_network_type_v<LogicNetwork>, "LogicNetwork is not a network type" );
     static_assert( mt::has_foreach_po_v<LogicNetwork>, "LogicNetwork does not implement the foreach_po method" );
     static_assert( mt::has_is_constant_v<LogicNetwork>, "LogicNetwork does not implement the is_constant method" );
     static_assert( mt::has_is_pi_v<LogicNetwork>, "LogicNetwork does not implement the is_pi method" );
     static_assert( mt::has_get_node_v<LogicNetwork>, "LogicNetwork does not implement the get_node method" );
+
+    (void)ps;
 
     std::unordered_set<mt::node<LogicNetwork>> drivers;
     ntk.foreach_po( [&]( auto const& f ) { drivers.insert( ntk.get_node( f ) ); } );
@@ -105,12 +114,14 @@ public:
   }
 
   template<class Fn>
-  inline void foreach_step( Fn&& fn ) const
+  inline bool foreach_step( Fn&& fn ) const
   {
     for ( auto const& [n, a] : steps )
     {
       fn( n, a );
     }
+
+    return true;
   }
 
 private:
@@ -121,7 +132,7 @@ template<class LogicNetwork>
 class bennett_inplace_mapping_strategy
 {
 public:
-  bennett_inplace_mapping_strategy( LogicNetwork const& ntk )
+  bennett_inplace_mapping_strategy( LogicNetwork const& ntk, mapping_strategy_params const& ps = {} )
   {
     static_assert( mt::is_network_type_v<LogicNetwork>, "LogicNetwork is not a network type" );
     static_assert( mt::has_foreach_po_v<LogicNetwork>, "LogicNetwork does not implement the foreach_po method" );
@@ -134,6 +145,8 @@ public:
     static_assert( mt::has_decr_value_v<LogicNetwork>, "LogicNetwork does not implement the decr_value method" );
     static_assert( mt::has_fanout_size_v<LogicNetwork>, "LogicNetwork does not implement the fanout_size method" );
     static_assert( mt::has_foreach_fanin_v<LogicNetwork>, "LogicNetwork does not implement the foreach_fanin method" );
+
+    (void)ps;
 
     std::unordered_set<mt::node<LogicNetwork>> drivers;
     ntk.foreach_po( [&]( auto const& f ) { drivers.insert( ntk.get_node( f ) ); } );
@@ -204,12 +217,14 @@ public:
   }
 
   template<class Fn>
-  inline void foreach_step( Fn&& fn ) const
+  inline bool foreach_step( Fn&& fn ) const
   {
     for ( auto const& [n, a] : steps )
     {
       fn( n, a );
     }
+
+    return true;
   }
 
 private:

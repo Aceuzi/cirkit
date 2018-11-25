@@ -16,6 +16,8 @@ public:
     add_option( "--qmapping", qmapping, "qubit mapping", true )->set_type_name( "strategy in {bennett=0, bennett inplace=1, pebbling=2}" );
     add_option( "--gmapping", gmapping, "STG gate mapping", true )->set_type_name( "strategy in {PPRM=0, PKRM=1, spectrum=2}" );
     add_option( "--pebble_limit", pebble_limit, "Maximum number of pebbles for strategy 2" );
+    add_option( "--conflict_limit", conflict_limit, "Conflict limit for SAT solver in strategy 2" );
+    add_flag( "-p,--progress", "show progress" );
     add_flag( "-v,--verbose", "be verbose" );
   }
 
@@ -50,8 +52,13 @@ private:
     ps.verbose = is_set( "verbose" );
     if ( is_set( "pebble_limit" ) )
     {
-      ps.pebble_limit = pebble_limit;
+      ps.mapping_ps.pebble_limit = pebble_limit;
     }
+    if ( is_set( "conflict_limit" ) )
+    {
+      ps.mapping_ps.conflict_limit = conflict_limit;
+    }
+    ps.mapping_ps.progress = is_set( "progress" );
     auto& circs = store<qcircuit_t>();
     if ( circs.empty() || is_set( "new" ) )
     {
@@ -66,15 +73,15 @@ private:
       env->err() << "[e] invalid gmapping\n";
       break;
     case 0u:
-      caterpillar::logic_network_synthesis<qcircuit_t, LogicNetwork, MappingStrategy>( circs.current(), *( store<Store>().current() ), tweedledum::stg_from_pprm(), ps, &st );
+      success = caterpillar::logic_network_synthesis<qcircuit_t, LogicNetwork, MappingStrategy>( circs.current(), *( store<Store>().current() ), tweedledum::stg_from_pprm(), ps, &st );
       break;
     case 1u:
-      caterpillar::logic_network_synthesis<qcircuit_t, LogicNetwork, MappingStrategy>( circs.current(), *( store<Store>().current() ), tweedledum::stg_from_pkrm(), ps, &st );
+      success = caterpillar::logic_network_synthesis<qcircuit_t, LogicNetwork, MappingStrategy>( circs.current(), *( store<Store>().current() ), tweedledum::stg_from_pkrm(), ps, &st );
       break;
     case 2u: {
       tweedledum::stg_from_spectrum_params stg_ps;
       stg_ps.lin_comb_synth_behavior = tweedledum::stg_from_spectrum_params::never;
-      caterpillar::logic_network_synthesis<qcircuit_t, LogicNetwork, MappingStrategy>( circs.current(), *( store<Store>().current() ), tweedledum::stg_from_spectrum( stg_ps ), ps, &st );
+      success = caterpillar::logic_network_synthesis<qcircuit_t, LogicNetwork, MappingStrategy>( circs.current(), *( store<Store>().current() ), tweedledum::stg_from_spectrum( stg_ps ), ps, &st );
     } break;
     }
   }
@@ -85,6 +92,7 @@ public:
     return {
         {"qmapping", qmapping},
         {"gmapping", gmapping},
+        {"success", success},
         {"required_ancillae", st.required_ancillae},
         {"time_total", mockturtle::to_seconds( st.time_total )}};
   }
@@ -96,6 +104,8 @@ private:
   unsigned qmapping{0u};
   unsigned gmapping{0u};
   uint32_t pebble_limit;
+  uint32_t conflict_limit;
+  bool success{true};
 };
 
 ALICE_ADD_COMMAND( lns, "Synthesis" )

@@ -39,8 +39,10 @@ namespace mt = mockturtle;
 
 struct logic_network_synthesis_params
 {
-  /*! \brief Maximum number of pebbles to use, if supported by mapping strategy (0 means no limit) */
-  uint32_t pebble_limit{0u};
+  /*! \brief Parameters for the mapping strategy. */
+  mapping_strategy_params mapping_ps;
+
+  /*! \brief Be verbose. */
   bool verbose{false};
 };
 
@@ -73,7 +75,7 @@ public:
   {
   }
 
-  void run()
+  bool run()
   {
     mockturtle::stopwatch t( st.time_total );
     prepare_inputs();
@@ -81,12 +83,8 @@ public:
     if ( ntk.get_node( ntk.get_constant( false ) ) != ntk.get_node( ntk.get_constant( true ) ) )
       prepare_constant( true );
 
-    MappingStrategy strategy( ntk );
-    if constexpr ( has_set_pebble_limit_v<MappingStrategy> )
-    {
-      strategy.set_pebble_limit( ps.pebble_limit );
-    }
-    strategy.foreach_step( [&]( auto node, auto action ) {
+    MappingStrategy strategy( ntk, ps.mapping_ps );
+    const auto result = strategy.foreach_step( [&]( auto node, auto action ) {
       std::visit(
           overloaded{
               []( auto arg ) {},
@@ -117,6 +115,8 @@ public:
               }},
           action );
     } );
+
+    return result;
   }
 
 private:
@@ -502,7 +502,7 @@ private:
 template<class QuantumNetwork, class LogicNetwork,
          class MappingStrategy = bennett_inplace_mapping_strategy<LogicNetwork>,
          class SingleTargetGateSynthesisFn = tweedledum::stg_from_pprm>
-void logic_network_synthesis( QuantumNetwork& qnet, LogicNetwork const& ntk,
+bool logic_network_synthesis( QuantumNetwork& qnet, LogicNetwork const& ntk,
                               SingleTargetGateSynthesisFn const& stg_fn = {},
                               logic_network_synthesis_params const& ps = {},
                               logic_network_synthesis_stats* pst = nullptr )
@@ -514,7 +514,7 @@ void logic_network_synthesis( QuantumNetwork& qnet, LogicNetwork const& ntk,
                                                                                                                          ntk,
                                                                                                                          stg_fn,
                                                                                                                          ps, st );
-  impl.run();
+  const auto result = impl.run();
   if ( ps.verbose )
   {
     st.report();
@@ -524,6 +524,8 @@ void logic_network_synthesis( QuantumNetwork& qnet, LogicNetwork const& ntk,
   {
     *pst = st;
   }
+
+  return result;
 }
 
 } /* namespace caterpillar */
