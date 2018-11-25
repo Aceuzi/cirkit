@@ -85,6 +85,7 @@ public:
     return {
         {"qmapping", qmapping},
         {"gmapping", gmapping},
+        {"required_ancillae", st.required_ancillae},
         {"time_total", mockturtle::to_seconds( st.time_total )}};
   }
 

@@ -49,6 +49,9 @@ struct logic_network_synthesis_stats
   /*! \brief Total runtime. */
   mockturtle::stopwatch<>::duration time_total{0};
 
+  /*! \brief Required number of ancilla. */
+  uint32_t required_ancillae{0u};
+
   void report() const
   {
     std::cout << fmt::format( "[i] total time = {:>5.2f} secs\n", mockturtle::to_seconds( time_total ) );
@@ -144,6 +147,7 @@ private:
     if ( free_ancillae.empty() )
     {
       const auto r = qnet.num_qubits();
+      st.required_ancillae++;
       qnet.add_qubit();
       return r;
     }
@@ -172,14 +176,11 @@ private:
 
   std::vector<uint32_t> get_fanin_as_qubits( mt::node<LogicNetwork> const& n )
   {
-    //std::cout << "  children of " << n << " are =";
     std::vector<uint32_t> controls;
     ntk.foreach_fanin( n, [&]( auto const& f, auto i ) {
       assert( !ntk.is_complemented( f ) );
-      //std::cout << " " << ntk.node_to_index( ntk.get_node( f ) );
       controls.push_back( node_to_qubit[ntk.node_to_index( ntk.get_node( f ) )] );
     } );
-    //std::cout << "\n";
     return controls;
   }
 
