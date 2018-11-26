@@ -24,6 +24,12 @@ struct mapping_strategy_params
 
   /*! \brief Conflict limit for the SAT solver (0 means no limit). */
   uint32_t conflict_limit{0u};
+
+  /* relax */
+  bool increment_on_timeout{false};
+
+  /* decrement on success */
+  bool decrement_on_success{false};
 };
 
 template<class LogicNetwork>
@@ -48,30 +54,61 @@ public:
   template<class Fn>
   inline bool foreach_step( Fn&& fn ) const
   {
-    pebble_solver<LogicNetwork> solver( _ntk, ps.pebble_limit );
-    solver.initialize();
-
-    mockturtle::progress_bar bar( 100, "|{0}| current step = {1}", ps.progress );
-    percy::synth_result result;
-
-    do
+    assert( !ps.decrement_on_success || !ps.increment_on_timeout);
+    std::vector<std::pair<mockturtle::node<LogicNetwork>, mapping_strategy_action>> store_steps;
+    auto limit = ps.pebble_limit;
+    int max_steps = 100;
+    while(true)
     {
-      bar( std::min<uint32_t>( solver.current_step(), 100 ), solver.current_step() );
-      solver.add_step();
-      result = solver.solve( ps.conflict_limit );
-    } while ( result == percy::failure );
+      pebble_solver<LogicNetwork> solver( _ntk, limit );
+      solver.initialize();
 
-    if ( result == percy::timeout )
-    {
-      return false;
+      mockturtle::progress_bar bar( 100, "|{0}| current step = {1}", ps.progress );
+      percy::synth_result result;
+
+      do
+      {
+        if(solver.current_step() >= max_steps) 
+        {
+          result = percy::timeout;
+          break;
+        }
+
+        bar( std::min<uint32_t>( solver.current_step(), 100 ), solver.current_step() );
+        solver.add_step();
+        result = solver.solve( ps.conflict_limit );
+      } while ( result == percy::failure );
+
+      if ( result == percy::timeout )
+      {
+        if(ps.increment_on_timeout)
+        {        
+          limit++;
+          continue;
+        }
+        else if(!ps.decrement_on_success)
+          return false;
+      }
+      else if(result == percy::success)
+      {
+        store_steps = solver.extract_result();
+        if(ps.decrement_on_success)
+        {
+          limit--;
+          continue;
+        }
+      }
+
+      if(store_steps.empty()) return false;
+
+      for ( auto const& [n, a] : store_steps )
+      {
+        fn( n, a );
+      }
+
+      return true;
     }
-
-    for ( auto const& [n, a] : solver.extract_result() )
-    {
-      fn( n, a );
-    }
-
-    return true;
+    
   }
 
 private:

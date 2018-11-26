@@ -17,8 +17,11 @@ public:
     add_option( "--gmapping", gmapping, "STG gate mapping", true )->set_type_name( "strategy in {PPRM=0, PKRM=1, spectrum=2}" );
     add_option( "--pebble_limit", pebble_limit, "Maximum number of pebbles for strategy 2" );
     add_option( "--conflict_limit", conflict_limit, "Conflict limit for SAT solver in strategy 2" );
+    add_flag("--increment_on_timeout", "increment on timeout");
+    add_flag("--decrement_on_success", "decrement on success");
     add_flag( "-p,--progress", "show progress" );
     add_flag( "-v,--verbose", "be verbose" );
+    
   }
 
   template<class Store>
@@ -58,6 +61,10 @@ private:
     {
       ps.mapping_ps.conflict_limit = conflict_limit;
     }
+
+    ps.mapping_ps.increment_on_timeout = is_set("increment_on_timeout");
+    ps.mapping_ps.decrement_on_success = is_set("decrement_on_success");
+
     ps.mapping_ps.progress = is_set( "progress" );
     auto& circs = store<qcircuit_t>();
     if ( circs.empty() || is_set( "new" ) )
