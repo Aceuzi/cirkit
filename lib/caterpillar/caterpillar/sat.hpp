@@ -10,6 +10,7 @@
 
 #include <mockturtle/traits.hpp>
 #include <mockturtle/utils/node_map.hpp>
+#include <mockturtle/views/fanout_view.hpp>
 #include <percy/solvers/bsat2.hpp>
 
 namespace caterpillar
@@ -197,12 +198,58 @@ public:
     std::vector<std::vector<int>> vals_step( _nr_steps + 1 );
     Steps steps;
 
-    for ( int i = 0; i <= _nr_steps; i++ )
+    for ( auto i = 0u; i <= _nr_steps; ++i )
     {
-      for ( int j = 0; j < _nr_gates; j++ )
+      for ( auto j = 0u; j < _nr_gates; ++j )
       {
         const auto value = solver.var_value( pebble_var( i, j ) );
         vals_step[i].push_back( value );
+      }
+    }
+
+    /* remove redundant steps */
+    mockturtle::fanout_view<Network> fanout_view{_net};
+    for ( auto i = 1u; i <= _nr_steps; ++i )
+    {
+      for ( auto j = 0u; j < _nr_gates; ++j )
+      {
+        /* Is j pebbled at step i? */
+        if ( vals_step[i][j] && !vals_step[i - 1][j] )
+        {
+          bool redundant = true;
+          int redundant_until = -1;
+          std::vector<int> parent_indexes;
+          fanout_view.foreach_fanout( index_to_gate[j], [&]( auto const& parent ) {
+            parent_indexes.push_back( gate_to_index[parent] );
+          } );
+          for ( auto ii = i + 1u; ii <= _nr_steps; ++ii )
+          {
+            for ( auto parent : parent_indexes )
+            {
+              if ( vals_step[ii][parent] && !vals_step[ii - 1][parent] )
+              {
+                redundant = false;
+                break;
+              }
+            }
+            if ( !redundant )
+              break;
+            if ( !vals_step[ii][j] && vals_step[ii - 1][j] )
+            {
+              redundant_until = ii;
+              break;
+            }
+          }
+
+          if ( redundant && redundant_until > 0 )
+          {
+            // Found redundant gate j at step i until redundant_until
+            for ( auto ii = i; ii < redundant_until; ++ii )
+            {
+              vals_step[ii][j] = 0;
+            }
+          }
+        }
       }
     }
 

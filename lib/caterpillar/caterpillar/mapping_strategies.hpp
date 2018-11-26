@@ -25,10 +25,10 @@ struct mapping_strategy_params
   /*! \brief Conflict limit for the SAT solver (0 means no limit). */
   uint32_t conflict_limit{0u};
 
-  /* relax */
+  /*! \brief Increment pebble numbers, if timeout. */
   bool increment_on_timeout{false};
 
-  /* decrement on success */
+  /*! \brief Decrement pebble numbers, if satisfiable. */
   bool decrement_on_success{false};
 };
 
@@ -54,11 +54,11 @@ public:
   template<class Fn>
   inline bool foreach_step( Fn&& fn ) const
   {
-    assert( !ps.decrement_on_success || !ps.increment_on_timeout);
+    assert( !ps.decrement_on_success || !ps.increment_on_timeout );
     std::vector<std::pair<mockturtle::node<LogicNetwork>, mapping_strategy_action>> store_steps;
     auto limit = ps.pebble_limit;
     int max_steps = 100;
-    while(true)
+    while ( true )
     {
       pebble_solver<LogicNetwork> solver( _ntk, limit );
       solver.initialize();
@@ -68,7 +68,7 @@ public:
 
       do
       {
-        if(solver.current_step() >= max_steps) 
+        if ( solver.current_step() >= max_steps )
         {
           result = percy::timeout;
           break;
@@ -81,25 +81,26 @@ public:
 
       if ( result == percy::timeout )
       {
-        if(ps.increment_on_timeout)
-        {        
+        if ( ps.increment_on_timeout )
+        {
           limit++;
           continue;
         }
-        else if(!ps.decrement_on_success)
+        else if ( !ps.decrement_on_success )
           return false;
       }
-      else if(result == percy::success)
+      else if ( result == percy::success )
       {
         store_steps = solver.extract_result();
-        if(ps.decrement_on_success)
+        if ( ps.decrement_on_success )
         {
           limit--;
           continue;
         }
       }
 
-      if(store_steps.empty()) return false;
+      if ( store_steps.empty() )
+        return false;
 
       for ( auto const& [n, a] : store_steps )
       {
@@ -108,7 +109,6 @@ public:
 
       return true;
     }
-    
   }
 
 private:
