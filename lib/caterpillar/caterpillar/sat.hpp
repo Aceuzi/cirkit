@@ -12,7 +12,7 @@
 #include <mockturtle/utils/node_map.hpp>
 #include <mockturtle/views/fanout_view.hpp>
 #include <percy/solvers/bsat2.hpp>
-
+#include <algorithm>
 namespace caterpillar
 {
 
@@ -226,7 +226,7 @@ public:
           {
             for ( auto parent : parent_indexes )
             {
-              if ( vals_step[ii][parent] && !vals_step[ii - 1][parent] )
+              if ( vals_step[ii][parent] != vals_step[ii - 1][parent] )
               {
                 redundant = false;
                 break;
@@ -247,6 +247,35 @@ public:
             for ( auto ii = i; ii < redundant_until; ++ii )
             {
               vals_step[ii][j] = 0;
+            }
+          }
+        }
+
+        /* Is j unpebbled at step i? */
+        if ( !vals_step[i][j] && vals_step[i - 1][j] )
+        {
+          bool redundant = true;
+          int redundant_until = -1;
+          for ( auto ii = i + 1u; ii <= _nr_steps; ++ii )
+          {
+            if ( std::count( vals_step[ii].begin(), vals_step[ii].end(), 1 ) == _pebbles )
+            {
+              redundant = false;
+              break;
+            }
+            if ( vals_step[ii][j] && !vals_step[ii - 1][j] )
+            {
+              redundant_until = ii;
+              break;
+            }
+          }
+
+          if ( redundant && redundant_until > 0 )
+          {
+            // Found redundant gate j at step i until redundant_until
+            for ( auto ii = i; ii < redundant_until; ++ii )
+            {
+              vals_step[ii][j] = 1;
             }
           }
         }
